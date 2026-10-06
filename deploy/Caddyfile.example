@@ -1,0 +1,5 @@
+# Example: serve the proxy on a subdomain with automatic HTTPS.
+# Adapt the hostname and point it at the address ADDR listens on.
+api.example.com {
+	reverse_proxy 127.0.0.1:8795
+}

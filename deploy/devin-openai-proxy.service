@@ -1,0 +1,22 @@
+[Unit]
+Description=Devin OpenAI-compatible reverse proxy
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Run as the user that owns ~/.local/share/devin/credentials.toml,
+# or set DEVIN_API_KEY in the environment file below.
+User=YOUR_USERNAME
+ExecStart=/usr/local/bin/devin-openai-proxy
+Restart=on-failure
+RestartSec=3
+Environment=ADDR=127.0.0.1:8795
+# Recommended once the port is reachable beyond loopback:
+#   /etc/devin-openai-proxy/env  ->  AUTH_KEY=...  (and optionally DEVIN_API_KEY=...)
+EnvironmentFile=-/etc/devin-openai-proxy/env
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
