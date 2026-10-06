@@ -75,8 +75,21 @@ curl http://127.0.0.1:8795/v1/chat/completions \
 | `DEVIN_DEFAULT_MODEL` | `swe-2-medium` | Selector used when the request model is empty or unmapped |
 | `DEVIN_CLIENT_VERSION` | `3.10.27` | Client version reported in request metadata |
 
-Model names map `x.y` → `x-y` and pass through as upstream selectors;
-`swe-2` / `swe2` / `swe-2.0` alias to `swe-2-medium`.
+## Models & reasoning effort
+
+`/v1/models` lists model **families** (`swe-2`, `swe-1-7`, …). Reasoning
+effort is a request parameter, not a separate model — the standard OpenAI
+shape:
+
+```json
+{"model": "swe-2", "reasoning_effort": "high"}
+```
+
+This resolves to the `swe-2-high` upstream selector. Available tiers per
+family: `swe-2` ships `medium`/`high`/`max` (default `medium`); out-of-range
+efforts clamp to the nearest real tier (`low`→`medium`, `xhigh`→`max`).
+`swe-2-high` as a literal model name still works — an explicit suffix beats
+the parameter. Names with no effort variants pass through verbatim.
 
 ## Deployment
 

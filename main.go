@@ -29,7 +29,7 @@ var (
 	cfgAuthKey string
 	store      = newSigStore(2048, 7*24*time.Hour)
 
-	convMu sync.Mutex
+	convMu  sync.Mutex
 	convIDs = map[string]ids{} // convKey -> {session,cascade,trajectory}
 )
 
@@ -93,8 +93,9 @@ func listModels(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 405, "invalid_request_error", "method not allowed")
 		return
 	}
-	names := []string{"swe-2", "swe-2-medium", "swe-2-high", "swe-2-max",
-		"swe-1-7", "swe-1-7-lightning", "swe-1-6", "swe-1-6-fast", "swe-1-6-slow"}
+	// Families only — reasoning effort is a request parameter
+	// (reasoning_effort), not a separate model, per the OpenAI API shape.
+	names := []string{"swe-2", "swe-1-7", "swe-1-7-lightning", "swe-1-6", "swe-1-6-fast", "swe-1-6-slow"}
 	out := map[string]any{"object": "list", "data": []any{}}
 	for _, n := range names {
 		out["data"] = append(out["data"].([]any), map[string]any{
@@ -123,6 +124,8 @@ func chatCompletions(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 400, "invalid_request_error", "no usable messages")
 		return
 	}
+	selector := payload.selector
+	log.Printf("%s %s -> selector=%s msgs=%d stream=%v", r.Method, r.URL.Path, selector, len(payload.messages), req.Stream)
 	bundle := convIDBundle(convKey(&req, payload))
 
 	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Minute)
@@ -132,9 +135,9 @@ func chatCompletions(w http.ResponseWriter, r *http.Request) {
 	go func() { errCh <- streamChat(ctx, cfgAPIKey, payload, bundle, events) }()
 
 	if req.Stream {
-		serveStream(w, r, &req, events, errCh)
+		serveStream(w, r, &req, selector, events, errCh)
 	} else {
-		serveBuffered(w, &req, events, errCh)
+		serveBuffered(w, &req, selector, events, errCh)
 	}
 }
 
@@ -271,7 +274,7 @@ func (a *assembled) oaiUsage() map[string]any {
 
 // ---- SSE stream ----
 
-func serveStream(w http.ResponseWriter, r *http.Request, req *chatRequest, events <-chan chatEvent, errCh <-chan error) {
+func serveStream(w http.ResponseWriter, r *http.Request, req *chatRequest, selector string, events <-chan chatEvent, errCh <-chan error) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("X-Accel-Buffering", "no")
@@ -350,7 +353,7 @@ loop:
 		send(map[string]any{"error": map[string]any{"type": "backend_error", "message": runErr.Error()}})
 		chunk(map[string]any{}, "error")
 	} else {
-		asm.commit(resolveSelector(req.Model))
+		asm.commit(selector)
 		chunk(map[string]any{}, asm.finishReason())
 		if req.StreamOpts != nil && req.StreamOpts.IncludeUsage {
 			if u := asm.oaiUsage(); u != nil {
@@ -367,7 +370,7 @@ loop:
 
 // ---- buffered (non-stream) ----
 
-func serveBuffered(w http.ResponseWriter, req *chatRequest, events <-chan chatEvent, errCh <-chan error) {
+func serveBuffered(w http.ResponseWriter, req *chatRequest, selector string, events <-chan chatEvent, errCh <-chan error) {
 	asm := newAssembled()
 	for ev := range events {
 		asm.feed(ev, nil)
@@ -376,7 +379,7 @@ func serveBuffered(w http.ResponseWriter, req *chatRequest, events <-chan chatEv
 		writeErr(w, 502, "backend_error", err.Error())
 		return
 	}
-	asm.commit(resolveSelector(req.Model))
+	asm.commit(selector)
 
 	msg := map[string]any{"role": "assistant"}
 	if asm.text.Len() > 0 || len(asm.toolCalls) == 0 {
@@ -398,7 +401,7 @@ func serveBuffered(w http.ResponseWriter, req *chatRequest, events <-chan chatEv
 		msg["tool_calls"] = calls
 	}
 	body := map[string]any{
-		"id": "chatcmpl-" + strings.ReplaceAll(uuidv4(), "-", "")[:29],
+		"id":     "chatcmpl-" + strings.ReplaceAll(uuidv4(), "-", "")[:29],
 		"object": "chat.completion", "created": time.Now().Unix(),
 		"model": req.Model,
 		"choices": []any{map[string]any{

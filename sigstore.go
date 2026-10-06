@@ -13,12 +13,12 @@ import (
 // turn (ChatMessage #11/#12/#13/#18). The proxy never decrypts it — it just
 // round-trips the blob so multi-turn requests keep a verified CoT.
 type SignedThinking struct {
-	Text       string
-	Signature  string
-	SigType    string // "sealed" / "non-sealed" / ...
-	Redacted   bool
-	Selector   string // upstream model selector that issued it
-	StoredAt   time.Time
+	Text      string
+	Signature string
+	SigType   string // "sealed" / "non-sealed" / ...
+	Redacted  bool
+	Selector  string // upstream model selector that issued it
+	StoredAt  time.Time
 }
 
 // sigStore rehydrates signatures on rebuilt history. The client only has to

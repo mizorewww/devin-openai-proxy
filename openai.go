@@ -36,13 +36,29 @@ func base64StdDecode(s string) ([]byte, error) { return base64.StdEncoding.Decod
 // ---- OpenAI request types ----
 
 type chatRequest struct {
-	Model        string          `json:"model"`
-	Messages     []oaiMessage    `json:"messages"`
-	Stream       bool            `json:"stream"`
-	Tools        []oaiTool       `json:"tools"`
-	StreamOpts   *streamOptions  `json:"stream_options"`
-	MaxTokens    int             `json:"max_tokens"`
-	MaxCompToks  int             `json:"max_completion_tokens"`
+	Model       string         `json:"model"`
+	Messages    []oaiMessage   `json:"messages"`
+	Stream      bool           `json:"stream"`
+	Tools       []oaiTool      `json:"tools"`
+	StreamOpts  *streamOptions `json:"stream_options"`
+	MaxTokens   int            `json:"max_tokens"`
+	MaxCompToks int            `json:"max_completion_tokens"`
+	// Reasoning effort is an OpenAI parameter, not a model variant.
+	// reasoning_effort wins over reasoning.effort when both are sent.
+	ReasoningEffort string `json:"reasoning_effort"`
+	Reasoning       *struct {
+		Effort string `json:"effort"`
+	} `json:"reasoning"`
+}
+
+func (r *chatRequest) effort() string {
+	if r.ReasoningEffort != "" {
+		return r.ReasoningEffort
+	}
+	if r.Reasoning != nil {
+		return r.Reasoning.Effort
+	}
+	return ""
 }
 
 type streamOptions struct {
@@ -136,29 +152,99 @@ type devinPayload struct {
 	maxTokens int
 }
 
-var modelAliases = map[string]string{
-	"swe-2":         "swe-2-medium",
-	"swe2":          "swe-2-medium",
-	"swe-2.0":       "swe-2-medium",
-	"swe-2.0-medium": "swe-2-medium",
-	"swe-2.0-high":  "swe-2-high",
-	"swe-2.0-max":   "swe-2-max",
+// Upstream selectors encode effort in the name (swe-2-medium/high/max), but
+// the OpenAI surface exposes effort as a parameter. effortVariants lists the
+// effort tiers each family actually ships; families absent here ignore effort
+// and the name passes through verbatim.
+var effortVariants = map[string][]string{
+	"swe-2": {"medium", "high", "max"},
 }
 
-func resolveSelector(model string) string {
+var familyDefaultEffort = map[string]string{
+	"swe-2": "medium",
+}
+
+// Aliases keyed on the NORMALIZED (lowercase, dots→dashes) form.
+var familyAliases = map[string]string{
+	"swe2":    "swe-2",
+	"swe-2-0": "swe-2",
+}
+
+// Tier order used to clamp an unsupported effort to the nearest real variant.
+// Out-of-range requests prefer the closest HIGHER tier, then lower.
+var effortTiers = []string{"none", "minimal", "low", "medium", "high", "xhigh", "max"}
+
+func tierIndex(s string) int {
+	for i, t := range effortTiers {
+		if t == s {
+			return i
+		}
+	}
+	return -1
+}
+
+func nearestVariant(effort string, variants []string) string {
+	want := tierIndex(effort)
+	if want < 0 {
+		want = tierIndex("medium")
+	}
+	have := map[string]bool{}
+	for _, v := range variants {
+		have[v] = true
+	}
+	for d := 0; d < len(effortTiers); d++ {
+		if hi := want + d; hi < len(effortTiers) && have[effortTiers[hi]] {
+			return effortTiers[hi]
+		}
+		if lo := want - d; lo >= 0 && have[effortTiers[lo]] {
+			return effortTiers[lo]
+		}
+	}
+	return variants[0]
+}
+
+func isEffortSuffix(s string) bool { return tierIndex(s) >= 0 }
+
+// resolveSelector maps (model, reasoning_effort) onto the upstream selector.
+// Priority: explicit effort suffix in the model name ("swe-2-high") >
+// reasoning_effort parameter > family default. Names outside the effort
+// registry pass through verbatim (e.g. swe-1-6-fast, claude-opus-4-8-medium).
+func resolveSelector(model, effort string) string {
 	m := strings.ToLower(strings.TrimSpace(model))
 	if m == "" {
 		if d := os.Getenv("DEVIN_DEFAULT_MODEL"); d != "" {
-			return d
+			m = strings.ToLower(strings.ReplaceAll(d, ".", "-"))
+		} else {
+			m = defaultUpstreamModel
 		}
-		return defaultUpstreamModel
 	}
-	if a, ok := modelAliases[m]; ok {
-		return a
+	m = strings.ReplaceAll(m, ".", "-")
+	if a, ok := familyAliases[m]; ok {
+		m = a
 	}
-	// Normalize dotted version suffixes ("swe-2.0-high" already aliased; the
-	// generic "x.y" → "x-y" covers e.g. "claude-opus-4.8" → "claude-opus-4-8").
-	return strings.ReplaceAll(m, ".", "-")
+	base := m
+	suffixEffort := ""
+	if i := strings.LastIndex(m, "-"); i >= 0 && isEffortSuffix(m[i+1:]) {
+		suffixEffort = m[i+1:]
+		base = m[:i]
+		if a, ok := familyAliases[base]; ok {
+			base = a
+		}
+	}
+	if variants, ok := effortVariants[base]; ok {
+		pick := suffixEffort
+		if pick == "" {
+			pick = effort
+		}
+		if pick == "" {
+			pick = familyDefaultEffort[base]
+		}
+		if pick == "" {
+			pick = variants[0]
+		}
+		return base + "-" + nearestVariant(pick, variants)
+	}
+	return m // verbatim passthrough (unregistered family or foreign selector)
 }
 
 // toDevinPayload maps OpenAI messages to Devin history. Signature rehydration:
@@ -167,7 +253,7 @@ func resolveSelector(model string) string {
 // A miss simply leaves the turn unsigned (swe family tolerates; signed-required
 // families like claude-opus would 400 — surfaced as an upstream error).
 func toDevinPayload(req *chatRequest, store *sigStore) *devinPayload {
-	selector := resolveSelector(req.Model)
+	selector := resolveSelector(req.Model, req.effort())
 	maxTok := req.MaxCompToks
 	if maxTok == 0 {
 		maxTok = req.MaxTokens

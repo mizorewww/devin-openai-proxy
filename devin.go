@@ -200,13 +200,13 @@ type chatToolCall struct {
 }
 
 type chatMsg struct {
-	source    int // 1 user / 2 assistant / 4 tool_result
-	text      string
-	images    [][2]string // {b64, mime}
-	toolCalls []chatToolCall
+	source     int // 1 user / 2 assistant / 4 tool_result
+	text       string
+	images     [][2]string // {b64, mime}
+	toolCalls  []chatToolCall
 	toolCallID string
-	toolErr   bool
-	thinking  *SignedThinking
+	toolErr    bool
+	thinking   *SignedThinking
 }
 
 func encodeImage(img [2]string) []byte {
@@ -268,12 +268,12 @@ func encodeCompletionConfig(maxTokens int) []byte {
 		maxTokens = defaultMaxOutputTok
 	}
 	return bytes.Join([][]byte{
-		vField(1, 1),                    // num_completions
-		vField(2, uint64(maxTokens)),    // max_tokens
-		vField(3, 400),                  // max_newlines
-		f64Field(5, 1.0),                // temperature
-		vField(7, 40),                   // top_k
-		f64Field(8, 0.95),               // top_p
+		vField(1, 1),                 // num_completions
+		vField(2, uint64(maxTokens)), // max_tokens
+		vField(3, 400),               // max_newlines
+		f64Field(5, 1.0),             // temperature
+		vField(7, 40),                // top_k
+		f64Field(8, 0.95),            // top_p
 	}, nil)
 }
 
@@ -306,12 +306,12 @@ func buildRequest(apiKey, jwt string, payload *devinPayload, ids ids) []byte {
 // ---- response stream decode ----
 
 type chatEvent struct {
-	kind     string // text | reasoning | signature | redacted | tool_call | finish | usage
-	text     string
-	sigType  string
-	call     *chatToolCall // tool_call: id/name set on start; argsDelta in .Args
-	finish   string
-	usage    *usageStats
+	kind    string // text | reasoning | signature | redacted | tool_call | finish | usage
+	text    string
+	sigType string
+	call    *chatToolCall // tool_call: id/name set on start; argsDelta in .Args
+	finish  string
+	usage   *usageStats
 }
 
 type usageStats struct {
@@ -415,10 +415,11 @@ func decodeConnectStream(r io.Reader, out chan<- chatEvent) error {
 }
 
 // GetChatMessageResponse fields (verified):
-//   3 text delta | 9 thinking delta | 10 signature | 11 thinking_redacted
-//   21 signature_type | 6 tool_call {1 id,2 name,3 argsDelta} | 5 finish enum
-//   7 ModelUsageStats {2 prompt,3 completion,4 cache_create,5 cached}
-//   28 usage metrics (dimension-group form)
+//
+//	3 text delta | 9 thinking delta | 10 signature | 11 thinking_redacted
+//	21 signature_type | 6 tool_call {1 id,2 name,3 argsDelta} | 5 finish enum
+//	7 ModelUsageStats {2 prompt,3 completion,4 cache_create,5 cached}
+//	28 usage metrics (dimension-group form)
 func decodeChatFrame(proto []byte, out chan<- chatEvent) error {
 	fields, err := iterFields(proto)
 	if err != nil {
