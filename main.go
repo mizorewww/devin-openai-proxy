@@ -95,7 +95,7 @@ func listModels(w http.ResponseWriter, r *http.Request) {
 	}
 	// Families only — reasoning effort is a request parameter
 	// (reasoning_effort), not a separate model, per the OpenAI API shape.
-	names := []string{"swe-2", "swe-1-7", "swe-1-7-lightning", "swe-1-6", "swe-1-6-fast", "swe-1-6-slow"}
+	names := []string{"swe-2", "swe-2-flash", "swe-1-7", "swe-1-7-lightning", "swe-1-6", "swe-1-6-fast", "swe-1-6-slow"}
 	out := map[string]any{"object": "list", "data": []any{}}
 	for _, n := range names {
 		out["data"] = append(out["data"].([]any), map[string]any{
@@ -227,11 +227,19 @@ func (a *assembled) feed(ev chatEvent, emit func(kind string, v any)) {
 	}
 }
 
-// commit stores the turn's signed thinking so a later request can rehydrate it.
+// commit stores the turn's thinking so a later request can rehydrate it.
+// Unsigned-reasoning models (swe-2-flash) emit thinking with no signature
+// event at all, so the trailing unsigned block never reached a.signed —
+// flush it here. It replays later as field-11 text without 12/18, which is
+// the same shape the Devin CLI sends for these models.
 func (a *assembled) commit(selector string) {
+	if a.curThink != nil && a.curThink.Signature == "" && (a.curThink.Text != "" || a.curThink.Redacted) {
+		a.signed = append(a.signed, *a.curThink)
+		a.curThink = nil
+	}
 	for i := range a.signed {
 		b := a.signed[i]
-		if b.Signature == "" {
+		if b.Signature == "" && b.Text == "" {
 			continue
 		}
 		b.Selector = selector
@@ -243,10 +251,10 @@ func (a *assembled) commit(selector string) {
 	if len(a.signed) == 0 {
 		return
 	}
-	// Also index the newest signed block under the assistant content digest so
-	// clients that drop reasoning_content still get a verified turn.
+	// Also index the newest thinking block under the assistant content digest
+	// so clients that drop reasoning_content still replay the turn.
 	last := a.signed[len(a.signed)-1]
-	if last.Signature != "" {
+	if last.Signature != "" || last.Text != "" {
 		last.Selector = selector
 		last.StoredAt = time.Now()
 		store.put(digestOf("assistant", a.text.String(), toolCallDigest(a.toolCalls)), &last)

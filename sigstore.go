@@ -38,7 +38,9 @@ func newSigStore(max int, ttl time.Duration) *sigStore {
 }
 
 func (s *sigStore) put(key string, t *SignedThinking) {
-	if key == "" || t == nil || t.Signature == "" {
+	// Unsigned blocks are stored too — unsigned-reasoning models still want
+	// their thinking text back on field 11. A fully empty blob is useless.
+	if key == "" || t == nil || (t.Signature == "" && t.Text == "") {
 		return
 	}
 	s.mu.Lock()
@@ -63,9 +65,11 @@ func (s *sigStore) get(key, selector string) *SignedThinking {
 	if s.ttl > 0 && time.Since(t.StoredAt) > s.ttl {
 		return nil
 	}
-	// Audit rule (pi-devin): only replay a signature to the same upstream
-	// selector that issued it — cross-model replay is refused.
-	if selector != "" && t.Selector != "" && t.Selector != selector {
+	// Signed blobs verify only against their issuing selector — a miss here
+	// falls back to unsigned text replay, which degrades cross-family turns
+	// gracefully. Unsigned summaries carry nothing to verify and replay
+	// regardless of selector, same as the Devin CLI.
+	if t.Signature != "" && selector != "" && t.Selector != "" && t.Selector != selector {
 		return nil
 	}
 	return t

@@ -157,11 +157,13 @@ type devinPayload struct {
 // effort tiers each family actually ships; families absent here ignore effort
 // and the name passes through verbatim.
 var effortVariants = map[string][]string{
-	"swe-2": {"medium", "high", "max"},
+	"swe-2":       {"medium", "high", "max"},
+	"swe-2-flash": {"medium", "high", "max"},
 }
 
 var familyDefaultEffort = map[string]string{
-	"swe-2": "medium",
+	"swe-2":       "medium",
+	"swe-2-flash": "medium",
 }
 
 // Aliases keyed on the NORMALIZED (lowercase, dots→dashes) form.
@@ -282,15 +284,21 @@ func toDevinPayload(req *chatRequest, store *sigStore) *devinPayload {
 					Args: tc.Function.Arguments,
 				})
 			}
-			// Rehydrate the signed thinking blob. Two keys: the reasoning the
+			// Rehydrate the thinking blob. Two store keys: the reasoning the
 			// client echoed, and the assistant content itself (when the client
-			// strips reasoning_content entirely).
+			// strips reasoning_content entirely). A miss still replays the
+			// echoed reasoning as unsigned field-11 text — unsigned-reasoning
+			// models (swe-2-flash) expect exactly that, the same thing the
+			// Devin CLI sends for their stored unsigned thinking.
 			var blob *SignedThinking
 			if m.ReasoningContent != "" {
 				blob = store.get(digestOf("reasoning", m.ReasoningContent), selector)
 			}
 			if blob == nil {
 				blob = store.get(digestOf("assistant", c.text, toolCallDigest(am.toolCalls)), selector)
+			}
+			if blob == nil && m.ReasoningContent != "" {
+				blob = &SignedThinking{Text: m.ReasoningContent}
 			}
 			am.thinking = blob
 			if c.text == "" && len(am.toolCalls) == 0 && blob == nil {

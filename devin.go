@@ -240,11 +240,15 @@ func encodeChatMessage(m chatMsg) []byte {
 	for _, img := range m.images {
 		parts = append(parts, mField(10, encodeImage(img)))
 	}
-	// Signed-CoT quartet — replayed verbatim so the server can verify the trace.
-	if m.thinking != nil && m.thinking.Signature != "" {
-		parts = append(parts,
-			sField(11, m.thinking.Text),
-			sField(12, m.thinking.Signature))
+	// Thinking rides field 11 whether or not the upstream minted a signature.
+	// Unsigned-reasoning models (swe-2-flash) return thinking with no signature
+	// and still expect the summary text back on 11 — the official CLI replays
+	// exactly that. 12/13/18 attach only when the server issued them.
+	if m.thinking != nil {
+		parts = append(parts, sField(11, m.thinking.Text))
+		if m.thinking.Signature != "" {
+			parts = append(parts, sField(12, m.thinking.Signature))
+		}
 		if m.thinking.Redacted {
 			parts = append(parts, vField(13, 1))
 		}
@@ -330,6 +334,9 @@ func streamChat(ctx context.Context, apiKey string, payload *devinPayload, ids i
 		return err
 	}
 	proto := buildRequest(apiKey, jwt, payload, ids)
+	if dump := os.Getenv("DEVIN_DUMP"); dump != "" {
+		os.WriteFile(dump, proto, 0o600)
+	}
 	body, err := frameConnectStream(proto, true)
 	if err != nil {
 		return err

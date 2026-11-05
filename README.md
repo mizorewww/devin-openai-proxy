@@ -23,22 +23,25 @@ thinking block. Verifying and continuing a reasoning trace across turns
 requires replaying that signature — the same thing the official Devin CLI
 does internally.
 
-This proxy keeps an in-memory store of issued signatures keyed by content
+This proxy keeps an in-memory store of issued thinking keyed by content
 digests:
 
 1. On a response, each `{thinking, signature, signature_type, redacted}`
    blob is stored under the hash of its thinking text **and** the hash of the
-   assistant turn's content.
+   assistant turn's content. Unsigned-reasoning models (e.g. `swe-2-flash`,
+   which returns thinking with no signature) are stored the same way.
 2. On the next request, each assistant message in the history is rehydrated
    by looking up first the client-echoed `reasoning_content`, then the
    assistant text + tool_calls digest, and the blob is replayed through
    ChatMessage fields `#11` (thinking) / `#12` (signature) / `#13`
-   (redacted) / `#18` (signature_type).
-3. Signatures are only ever replayed to the model selector that issued them.
+   (redacted) / `#18` (signature_type). Unsigned blobs send field 11 alone —
+   the same shape the Devin CLI uses for these models.
+3. When the store misses, an echoed `reasoning_content` is still replayed as
+   unsigned field-11 text. Signed blobs only ever replay to the model
+   selector that issued them; a cross-family miss degrades to unsigned text.
 
 Clients never see or send signatures; the conversation only carries normal
-OpenAI-shaped messages. A lookup miss simply sends the turn unsigned, which
-the swe model family tolerates.
+OpenAI-shaped messages.
 
 `cascade_id` / trajectory / session ids are derived from a stable
 conversation-root hash, so upstream sees one continuous session across
@@ -74,6 +77,7 @@ curl http://127.0.0.1:8795/v1/chat/completions \
 | `ADDR` | `127.0.0.1:8795` | Listen address |
 | `DEVIN_DEFAULT_MODEL` | `swe-2-medium` | Selector used when the request model is empty or unmapped |
 | `DEVIN_CLIENT_VERSION` | `3.10.27` | Client version reported in request metadata |
+| `DEVIN_DUMP` | unset | Debug: write the last encoded request proto to this path (contains the api key — local debugging only) |
 
 ## Models & reasoning effort
 
@@ -99,8 +103,9 @@ Caddyfile snippet to adapt.
 
 ## Known limitations
 
-- The signature store is in-memory: after a restart, prior turns replay
-  unsigned (fine for the swe family).
+- The signature store is in-memory: after a restart, signed turns degrade
+  to unsigned text replay (the client's echoed `reasoning_content` still
+  reaches the model), while unsigned-reasoning turns are unaffected.
 - When a turn yields multiple signed thinking blocks, only the newest one is
   replayed upstream (matching the reference client behavior).
 - Empty assistant messages are dropped; runs of consecutive same-role text
