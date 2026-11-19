@@ -326,10 +326,57 @@ func toDevinPayload(req *chatRequest, store *sigStore) *devinPayload {
 		p.tools = append(p.tools, devinTool{
 			Name:        t.Function.Name,
 			Description: t.Function.Description,
-			Parameters:  t.Function.Parameters,
+			Parameters:  typeEnums(t.Function.Parameters),
 		})
 	}
 	return p
+}
+
+// typeEnums adds `"type":"string"` to enum nodes that omit a type and list
+// only strings. The Gemini family rejects the whole request ("There is an
+// issue with this request") on an untyped enum; swe tolerates both, and the
+// added type says nothing the enum didn't already. Untouched schemas keep
+// their original bytes.
+func typeEnums(raw json.RawMessage) json.RawMessage {
+	var v any
+	if json.Unmarshal(raw, &v) != nil {
+		return raw
+	}
+	changed := false
+	var walk func(any)
+	walk = func(n any) {
+		switch n := n.(type) {
+		case map[string]any:
+			if enum, ok := n["enum"].([]any); ok && len(enum) > 0 && n["type"] == nil {
+				allStr := true
+				for _, e := range enum {
+					if _, ok := e.(string); !ok {
+						allStr = false
+					}
+				}
+				if allStr {
+					n["type"] = "string"
+					changed = true
+				}
+			}
+			for _, c := range n {
+				walk(c)
+			}
+		case []any:
+			for _, c := range n {
+				walk(c)
+			}
+		}
+	}
+	walk(v)
+	if !changed {
+		return raw
+	}
+	out, err := json.Marshal(v)
+	if err != nil {
+		return raw
+	}
+	return out
 }
 
 func toolCallDigest(calls []chatToolCall) string {

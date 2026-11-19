@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
 
 func TestSelector(t *testing.T) {
 	cases := []struct{ model, effort, want string }{
@@ -24,6 +27,20 @@ func TestSelector(t *testing.T) {
 	for _, c := range cases {
 		if got := resolveSelector(c.model, c.effort); got != c.want {
 			t.Errorf("resolveSelector(%q,%q)=%q want %q", c.model, c.effort, got, c.want)
+		}
+	}
+}
+
+func TestTypeEnums(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{`{"properties":{"a":{"enum":["x","y"]}}}`, `{"properties":{"a":{"enum":["x","y"],"type":"string"}}}`},
+		{`{"anyOf":[{"enum":["x"]}]}`, `{"anyOf":[{"enum":["x"],"type":"string"}]}`},
+		{`{"enum":[1,2]}`, `{"enum":[1,2]}`},                                 // non-string: left alone
+		{`{"type":"string","enum":["x"]}`, `{"type":"string","enum":["x"]}`}, // already typed: bytes kept
+	}
+	for _, c := range cases {
+		if got := string(typeEnums(json.RawMessage(c.in))); got != c.want {
+			t.Errorf("typeEnums(%s)=%s want %s", c.in, got, c.want)
 		}
 	}
 }
