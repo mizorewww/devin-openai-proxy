@@ -16,6 +16,10 @@ func TestSelector(t *testing.T) {
 		{"swe-1-6-fast", "", "swe-1-6-fast"}, // non-effort family passthrough
 		{"swe-1-7", "high", "swe-1-7"},       // effort ignored, no variants
 		{"", "", "swe-2-medium"},             // default model
+		{"gemini-4-argon", "", "gemini-4-argon-medium"},
+		{"gemini-4-argon", "low", "gemini-4-argon-low"},
+		{"gemini-4-argon", "max", "gemini-4-argon-high"}, // clamp down
+		{"gemini-4-argon-high", "", "gemini-4-argon-high"},
 	}
 	for _, c := range cases {
 		if got := resolveSelector(c.model, c.effort); got != c.want {

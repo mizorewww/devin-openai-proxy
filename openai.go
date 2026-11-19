@@ -157,13 +157,15 @@ type devinPayload struct {
 // effort tiers each family actually ships; families absent here ignore effort
 // and the name passes through verbatim.
 var effortVariants = map[string][]string{
-	"swe-2":       {"medium", "high", "max"},
-	"swe-2-flash": {"medium", "high", "max"},
+	"swe-2":          {"medium", "high", "max"},
+	"swe-2-flash":    {"medium", "high", "max"},
+	"gemini-4-argon": {"low", "medium", "high"},
 }
 
 var familyDefaultEffort = map[string]string{
-	"swe-2":       "medium",
-	"swe-2-flash": "medium",
+	"swe-2":          "medium",
+	"swe-2-flash":    "medium",
+	"gemini-4-argon": "medium",
 }
 
 // Aliases keyed on the NORMALIZED (lowercase, dots→dashes) form.
