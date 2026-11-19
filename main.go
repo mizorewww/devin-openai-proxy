@@ -358,6 +358,7 @@ loop:
 		runErr = err
 	}
 	if runErr != nil {
+		log.Printf("stream error selector=%s: %v", selector, runErr)
 		send(map[string]any{"error": map[string]any{"type": "backend_error", "message": runErr.Error()}})
 		chunk(map[string]any{}, "error")
 	} else {
@@ -384,6 +385,7 @@ func serveBuffered(w http.ResponseWriter, req *chatRequest, selector string, eve
 		asm.feed(ev, nil)
 	}
 	if err := <-errCh; err != nil {
+		log.Printf("upstream error selector=%s: %v", selector, err)
 		writeErr(w, 502, "backend_error", err.Error())
 		return
 	}
