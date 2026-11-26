@@ -158,12 +158,14 @@ type devinPayload struct {
 // and the name passes through verbatim.
 var effortVariants = map[string][]string{
 	"swe-2":          {"medium", "high", "max"},
+	"swe-2-1":        {"low", "medium", "high", "xhigh", "max"},
 	"swe-2-flash":    {"medium", "high", "max"},
 	"gemini-4-argon": {"low", "medium", "high"},
 }
 
 var familyDefaultEffort = map[string]string{
 	"swe-2":          "medium",
+	"swe-2-1":        "medium",
 	"swe-2-flash":    "medium",
 	"gemini-4-argon": "medium",
 }
@@ -172,6 +174,7 @@ var familyDefaultEffort = map[string]string{
 var familyAliases = map[string]string{
 	"swe2":    "swe-2",
 	"swe-2-0": "swe-2",
+	"swe2-1":  "swe-2-1",
 }
 
 // Tier order used to clamp an unsupported effort to the nearest real variant.

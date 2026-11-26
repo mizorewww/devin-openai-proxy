@@ -81,7 +81,7 @@ curl http://127.0.0.1:8795/v1/chat/completions \
 
 ## Models & reasoning effort
 
-`/v1/models` lists model **families** (`swe-2`, `swe-1-7`, …). Reasoning
+`/v1/models` lists model **families** (`swe-2-1`, `swe-2`, `swe-1-7`, …). Reasoning
 effort is a request parameter, not a separate model — the standard OpenAI
 shape:
 
@@ -90,7 +90,8 @@ shape:
 ```
 
 This resolves to the `swe-2-high` upstream selector. Available tiers per
-family: `swe-2` ships `medium`/`high`/`max` (default `medium`); out-of-range
+family: `swe-2` ships `medium`/`high`/`max` (default `medium`); `swe-2-1`
+(also `swe-2.1`) ships `low`/`medium`/`high`/`xhigh`/`max` (default `medium`); out-of-range
 efforts clamp to the nearest real tier (`low`→`medium`, `xhigh`→`max`).
 `swe-2-high` as a literal model name still works — an explicit suffix beats
 the parameter. Names with no effort variants pass through verbatim.

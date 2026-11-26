@@ -95,7 +95,7 @@ func listModels(w http.ResponseWriter, r *http.Request) {
 	}
 	// Families only — reasoning effort is a request parameter
 	// (reasoning_effort), not a separate model, per the OpenAI API shape.
-	names := []string{"swe-2", "swe-2-flash", "swe-1-7", "swe-1-7-lightning", "swe-1-6", "swe-1-6-fast", "swe-1-6-slow"}
+	names := []string{"swe-2-1", "swe-2", "swe-2-flash", "swe-1-7", "swe-1-7-lightning", "swe-1-6", "swe-1-6-fast", "swe-1-6-slow"}
 	out := map[string]any{"object": "list", "data": []any{}}
 	for _, n := range names {
 		out["data"] = append(out["data"].([]any), map[string]any{

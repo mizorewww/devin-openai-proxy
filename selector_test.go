@@ -18,7 +18,12 @@ func TestSelector(t *testing.T) {
 		{"SWE-2.0", "max", "swe-2-max"},
 		{"swe-1-6-fast", "", "swe-1-6-fast"}, // non-effort family passthrough
 		{"swe-1-7", "high", "swe-1-7"},       // effort ignored, no variants
-		{"", "", "swe-2-medium"},             // default model
+		{"swe-2.1", "", "swe-2-1-medium"},
+		{"swe-2-1", "xhigh", "swe-2-1-xhigh"},
+		{"SWE-2.1", "minimal", "swe-2-1-low"}, // clamp: no minimal variant
+		{"swe-2-1-max", "low", "swe-2-1-max"},
+		{"swe2.1", "high", "swe-2-1-high"},
+		{"", "", "swe-2-medium"}, // default model
 		{"gemini-4-argon", "", "gemini-4-argon-medium"},
 		{"gemini-4-argon", "low", "gemini-4-argon-low"},
 		{"gemini-4-argon", "max", "gemini-4-argon-high"}, // clamp down
